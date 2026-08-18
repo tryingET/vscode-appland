@@ -74,8 +74,9 @@ describe('AppMap sequence comparison editor', () => {
       () => editorProvider.openDocuments.length === 1
     );
 
-    const comparison = editorProvider.openDocuments[0]
-      .sequenceDiagramComparison as SequenceComparison | undefined;
+    const comparison = editorProvider.openDocuments[0].sequenceDiagramComparison as
+      | SequenceComparison
+      | undefined;
     assert(comparison);
     assert.equal(comparison.kind, 'appmap.sequence-comparison');
     assert(comparison.base?.actors && comparison.head?.actors && comparison.diff?.actors);
