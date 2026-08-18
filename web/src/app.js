@@ -7,11 +7,13 @@ import mountFindingsView from './findingsView';
 import mountInstallGuide from './installGuideView';
 import mountSignInView from './signInView';
 import mountReview from './review';
+import mountSequenceComparison from './sequenceComparisonView';
 
 Vue.use(plugin);
 
 const modules = {
   app: mountApp,
+  comparison: mountSequenceComparison,
   'install-guide': mountInstallGuide,
   'findings-view': mountFindingsView,
   'finding-info-view': mountFindingInfoView,
