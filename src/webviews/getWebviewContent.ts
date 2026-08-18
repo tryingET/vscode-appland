@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 
 type AppmapModule =
   | 'app'
+  | 'comparison'
   | 'install-guide'
   | 'chat-search'
   | 'findings-view'
