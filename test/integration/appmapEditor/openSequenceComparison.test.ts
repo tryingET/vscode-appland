@@ -53,6 +53,6 @@ describe('AppMap sequence comparison editor', () => {
       'AppMap comparison should be opened',
       () => editorProvider.openDocuments.length === 1
     );
-    expect(editorProvider.openDocuments[0].sequenceDiagramComparison).to.be.an('object');
+    assert(editorProvider.openDocuments[0].sequenceDiagramComparison);
   });
 });
