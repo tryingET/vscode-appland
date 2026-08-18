@@ -15,31 +15,43 @@ const COMPARISON_PATH = join(
   ProjectDiagramDiff,
   'data/diff/minitest/Users_edit_unsuccessful_edit.compare.diff.sequence.json'
 );
+const EXPECTED_CHANGE_PATH = `${COMPARISON_PATH}.expect`;
+
+async function ensureComparisonFixture(): Promise<void> {
+  try {
+    const existing = JSON.parse(await readFile(COMPARISON_PATH, 'utf8'));
+    if (existing.kind === 'appmap.sequence-comparison') return;
+  } catch {
+    // The normal repository test creates a compact fallback below. The dogfood
+    // workflow copies a real CLI-produced bundle to COMPARISON_PATH first.
+  }
+
+  const diagram = JSON.parse(await readFile(DIFF_PATH, 'utf8'));
+  await writeFile(
+    COMPARISON_PATH,
+    JSON.stringify({
+      kind: 'appmap.sequence-comparison',
+      schemaVersion: 1,
+      scenario: 'Users edit unsuccessful edit',
+      baseRevision: 'base-sha',
+      headRevision: 'head-sha',
+      baseAppMap: 'base.appmap.json',
+      headAppMap: 'head.appmap.json',
+      base: diagram,
+      head: diagram,
+      diff: diagram,
+      changes: [],
+    })
+  );
+}
 
 describe('AppMap sequence comparison editor', () => {
   beforeEach(initializeWorkspace);
   beforeEach(waitForExtension);
-  beforeEach(async () => {
-    const diagram = JSON.parse(await readFile(DIFF_PATH, 'utf8'));
-    await writeFile(
-      COMPARISON_PATH,
-      JSON.stringify({
-        kind: 'appmap.sequence-comparison',
-        schemaVersion: 1,
-        scenario: 'Users edit unsuccessful edit',
-        baseRevision: 'base-sha',
-        headRevision: 'head-sha',
-        baseAppMap: 'base.appmap.json',
-        headAppMap: 'head.appmap.json',
-        base: diagram,
-        head: diagram,
-        diff: diagram,
-        changes: [],
-      })
-    );
-  });
+  beforeEach(ensureComparisonFixture);
   afterEach(initializeWorkspace);
   afterEach(() => rm(COMPARISON_PATH, { force: true }));
+  afterEach(() => rm(EXPECTED_CHANGE_PATH, { force: true }));
 
   it('opens a self-contained before/after comparison', async () => {
     const extension = vscode.extensions.getExtension<AppMapService>('appland.appmap');
@@ -53,6 +65,22 @@ describe('AppMap sequence comparison editor', () => {
       'AppMap comparison should be opened',
       () => editorProvider.openDocuments.length === 1
     );
-    assert(editorProvider.openDocuments[0].sequenceDiagramComparison);
+
+    const comparison = editorProvider.openDocuments[0].sequenceDiagramComparison as any;
+    assert(comparison);
+    assert.equal(comparison.kind, 'appmap.sequence-comparison');
+    assert(comparison.base?.actors && comparison.head?.actors && comparison.diff?.actors);
+
+    try {
+      const expectedChange = (await readFile(EXPECTED_CHANGE_PATH, 'utf8')).trim().toLowerCase();
+      assert(
+        comparison.changes.some((change: any) =>
+          String(change.name).toLowerCase().includes(expectedChange)
+        ),
+        `Expected the dogfood comparison to contain ${expectedChange}`
+      );
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
   });
 });
