@@ -97,7 +97,26 @@ export default class AppMapEditorProvider
     }
 
     if (appMapOrSequenceDiagramDiffUri.fsPath.endsWith('.diff.sequence.json')) {
-      sequenceDiagramData = await readFile(appMapOrSequenceDiagramDiffUri.fsPath, 'utf-8');
+      const diagramData = await readFile(appMapOrSequenceDiagramDiffUri.fsPath, 'utf-8');
+      let parsedDiagram: Record<string, unknown> | undefined;
+      try {
+        parsedDiagram = JSON.parse(diagramData) as Record<string, unknown>;
+      } catch (e) {
+        return abortSequenceDiagramDiff(`Invalid JSON: ${e}`);
+      }
+
+      if (parsedDiagram.kind === 'appmap.sequence-comparison') {
+        return new AppMapDocument(
+          appMapOrSequenceDiagramDiffUri,
+          AppMapEditorProvider.EMPTY_APPMAP_DATA,
+          { functions: [] },
+          [],
+          undefined,
+          diagramData
+        );
+      }
+
+      sequenceDiagramData = diagramData;
       const appMapTokens = appMapOrSequenceDiagramDiffUri.fsPath.split('/');
       const diffIndex = appMapTokens.lastIndexOf('diff');
       if (diffIndex === -1)
@@ -261,18 +280,25 @@ export default class AppMapEditorProvider
     });
 
     const updateWebview = (initialState: string | undefined) => {
-      webviewPanel.webview.postMessage({
-        type: 'update',
-        appMap: document.appMap,
-        sequenceDiagram: document.sequenceDiagram,
-      });
+      if (document.sequenceDiagramComparison) {
+        webviewPanel.webview.postMessage({
+          type: 'update-comparison',
+          comparison: document.sequenceDiagramComparison,
+        });
+      } else {
+        webviewPanel.webview.postMessage({
+          type: 'update',
+          appMap: document.appMap,
+          sequenceDiagram: document.sequenceDiagram,
+        });
+      }
 
       const { workspaceFolder } = document;
       if (workspaceFolder) {
         this.extensionState.setWorkspaceOpenedAppMap(workspaceFolder, true);
       }
 
-      if (initialState)
+      if (initialState && !document.sequenceDiagramComparison)
         webviewPanel.webview.postMessage({
           type: 'setAppmapState',
           state: initialState,
@@ -298,6 +324,9 @@ export default class AppMapEditorProvider
     );
     webviewPanel.webview.onDidReceiveMessage(async (message) => {
       switch (message.command) {
+        case 'comparison-ready':
+          updateWebview(undefined);
+          break;
         case 'ready':
           updateWebview(initialState);
           break;
@@ -333,7 +362,10 @@ export default class AppMapEditorProvider
     webviewPanel.webview.options = {
       enableScripts: true,
     };
-    webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
+    webviewPanel.webview.html = this.getHtmlForWebview(
+      webviewPanel.webview,
+      Boolean(document.sequenceDiagramComparison)
+    );
 
     webviewPanel.onDidDispose(() => {
       removeOne(this.documents, document);
@@ -345,8 +377,13 @@ export default class AppMapEditorProvider
   /**
    * Get the static html used for the editor webviews.
    */
-  private getHtmlForWebview(webview: vscode.Webview): string {
-    return getWebviewContent(webview, this.context, 'AppMap Diagram', 'app');
+  private getHtmlForWebview(webview: vscode.Webview, comparison = false): string {
+    return getWebviewContent(
+      webview,
+      this.context,
+      comparison ? 'AppMap Comparison' : 'AppMap Diagram',
+      comparison ? 'comparison' : 'app'
+    );
   }
 
   //forget usage state set by this class
