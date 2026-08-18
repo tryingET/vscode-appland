@@ -17,9 +17,17 @@ const COMPARISON_PATH = join(
 );
 const EXPECTED_CHANGE_PATH = `${COMPARISON_PATH}.expect`;
 
+type SequenceComparison = {
+  kind: string;
+  base?: { actors?: unknown[] };
+  head?: { actors?: unknown[] };
+  diff?: { actors?: unknown[] };
+  changes: Array<{ name?: string }>;
+};
+
 async function ensureComparisonFixture(): Promise<void> {
   try {
-    const existing = JSON.parse(await readFile(COMPARISON_PATH, 'utf8'));
+    const existing = JSON.parse(await readFile(COMPARISON_PATH, 'utf8')) as SequenceComparison;
     if (existing.kind === 'appmap.sequence-comparison') return;
   } catch {
     // The normal repository test creates a compact fallback below. The dogfood
@@ -66,7 +74,8 @@ describe('AppMap sequence comparison editor', () => {
       () => editorProvider.openDocuments.length === 1
     );
 
-    const comparison = editorProvider.openDocuments[0].sequenceDiagramComparison as any;
+    const comparison = editorProvider.openDocuments[0]
+      .sequenceDiagramComparison as SequenceComparison | undefined;
     assert(comparison);
     assert.equal(comparison.kind, 'appmap.sequence-comparison');
     assert(comparison.base?.actors && comparison.head?.actors && comparison.diff?.actors);
@@ -74,7 +83,7 @@ describe('AppMap sequence comparison editor', () => {
     try {
       const expectedChange = (await readFile(EXPECTED_CHANGE_PATH, 'utf8')).trim().toLowerCase();
       assert(
-        comparison.changes.some((change: any) =>
+        comparison.changes.some((change) =>
           String(change.name).toLowerCase().includes(expectedChange)
         ),
         `Expected the dogfood comparison to contain ${expectedChange}`
