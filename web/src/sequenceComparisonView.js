@@ -80,6 +80,9 @@ export default function mountSequenceComparison() {
       currentChange() {
         return this.changes[this.selectedChangeIndex];
       },
+      currentKind() {
+        return this.currentChange ? this.currentChange.kind : '';
+      },
       scenario() {
         return this.comparison?.scenario || this.comparison?.headAppMap || 'AppMap scenario';
       },
@@ -211,7 +214,7 @@ export default function mountSequenceComparison() {
                 ref="baseScroller"
                 @scroll="synchronizeScroll('baseScroller', 'headScroller')"
               >
-                <VSequenceDiagram
+                <v-sequence-diagram
                   ref="baseDiagram"
                   :key="'base-' + comparisonKey"
                   :serialized-diagram="comparison.base"
@@ -228,7 +231,7 @@ export default function mountSequenceComparison() {
                 ref="headScroller"
                 @scroll="synchronizeScroll('headScroller', 'baseScroller')"
               >
-                <VSequenceDiagram
+                <v-sequence-diagram
                   ref="headDiagram"
                   :key="'head-' + comparisonKey"
                   :serialized-diagram="comparison.head"
@@ -242,12 +245,12 @@ export default function mountSequenceComparison() {
           <section class="appmap-comparison__bottom">
             <header>
               <strong>Unified behavioral diff</strong>
-              <span class="appmap-comparison__change" :data-kind="currentChange?.kind">
+              <span class="appmap-comparison__change" :data-kind="currentKind">
                 {{ changeDescription }}
               </span>
             </header>
             <div class="appmap-comparison__scroller">
-              <VSequenceDiagram
+              <v-sequence-diagram
                 ref="diffDiagram"
                 :key="'diff-' + comparisonKey"
                 :serialized-diagram="comparison.diff"
