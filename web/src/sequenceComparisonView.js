@@ -57,6 +57,59 @@ function revisionLabel(value) {
   return value.length > 12 ? value.slice(0, 12) : value;
 }
 
+function eventIds(reference) {
+  return reference?.eventIds || [];
+}
+
+function presentationKind(kind) {
+  if (kind === 'added' || String(kind).endsWith('-added')) return 'added';
+  if (kind === 'removed' || String(kind).endsWith('-removed')) return 'removed';
+  return 'changed';
+}
+
+function normalizeComparison(comparison) {
+  if (!comparison || typeof comparison !== 'object')
+    throw new Error('Invalid AppMap comparison bundle');
+
+  if (comparison.kind === 'appmap.sequence-comparison') return comparison;
+  if (comparison.kind !== 'appmap.comparison' || comparison.schemaVersion !== 1)
+    throw new Error('Unsupported AppMap comparison contract');
+
+  const sequence = comparison.views?.sequence;
+  if (!sequence || sequence.schemaVersion !== 1)
+    throw new Error('This comparison does not contain a supported Sequence Diagram view');
+
+  return {
+    kind: 'appmap.sequence-comparison',
+    schemaVersion: 1,
+    scenario: comparison.scenario?.name || comparison.scenario?.id,
+    baseRevision: comparison.revisions?.base,
+    headRevision: comparison.revisions?.head,
+    baseAppMap: comparison.recordings?.base,
+    headAppMap: comparison.recordings?.head,
+    base: sequence.base,
+    head: sequence.head,
+    diff: sequence.diff,
+    changes: (comparison.changes || []).map((change) => {
+      const sequenceReference = change.views?.sequence || {};
+      const name = change.details?.name || {};
+      const result = change.details?.result || {};
+      return {
+        id: change.id,
+        kind: presentationKind(change.kind),
+        baseEventIds: eventIds(sequenceReference.base || change.base),
+        headEventIds: eventIds(sequenceReference.head || change.head),
+        diffEventIds: eventIds(sequenceReference.diff),
+        name: name.after || name.before || change.summary,
+        formerName: name.before,
+        result: result.after,
+        formerResult: result.before,
+        labels: change.labels,
+      };
+    }),
+  };
+}
+
 export default function mountSequenceComparison() {
   installStyle();
   const vscode = window.acquireVsCodeApi();
@@ -124,9 +177,7 @@ export default function mountSequenceComparison() {
     },
     methods: {
       loadComparison(comparison) {
-        if (!comparison || comparison.kind !== 'appmap.sequence-comparison')
-          throw new Error('Invalid AppMap sequence comparison bundle');
-        this.comparison = comparison;
+        this.comparison = normalizeComparison(comparison);
         this.comparisonKey += 1;
         this.selectedChangeIndex = 0;
         this.$nextTick(() => this.$nextTick(this.applySelection));
@@ -145,11 +196,11 @@ export default function mountSequenceComparison() {
           .querySelectorAll('.appmap-comparison-selected')
           .forEach((element) => element.classList.remove('appmap-comparison-selected'));
       },
-      focusEvents(componentRef, eventIds) {
+      focusEvents(componentRef, selectedEventIds) {
         const component = this.$refs[componentRef];
-        if (!component || !component.$el || !eventIds?.length) return;
+        if (!component || !component.$el || !selectedEventIds?.length) return;
         let first;
-        eventIds.forEach((eventId) => {
+        selectedEventIds.forEach((eventId) => {
           const element = component.$el.querySelector(`[data-event-ids~="${eventId}"]`);
           if (!element) return;
           element.classList.add('appmap-comparison-selected');

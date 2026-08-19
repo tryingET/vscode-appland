@@ -19,16 +19,25 @@ const EXPECTED_CHANGE_PATH = `${COMPARISON_PATH}.expect`;
 
 type SequenceComparison = {
   kind: string;
-  base?: { actors?: unknown[] };
-  head?: { actors?: unknown[] };
-  diff?: { actors?: unknown[] };
-  changes: Array<{ name?: string }>;
+  views?: {
+    sequence?: {
+      base?: { actors?: unknown[] };
+      head?: { actors?: unknown[] };
+      diff?: { actors?: unknown[] };
+    };
+  };
+  changes: Array<{
+    summary?: string;
+    details?: {
+      name?: { before?: string; after?: string };
+    };
+  }>;
 };
 
 async function ensureComparisonFixture(): Promise<void> {
   try {
     const existing = JSON.parse(await readFile(COMPARISON_PATH, 'utf8')) as SequenceComparison;
-    if (existing.kind === 'appmap.sequence-comparison') return;
+    if (existing.kind === 'appmap.comparison') return;
   } catch {
     // The normal repository test creates a compact fallback below. The dogfood
     // workflow copies a real CLI-produced bundle to COMPARISON_PATH first.
@@ -38,17 +47,26 @@ async function ensureComparisonFixture(): Promise<void> {
   await writeFile(
     COMPARISON_PATH,
     JSON.stringify({
-      kind: 'appmap.sequence-comparison',
+      kind: 'appmap.comparison',
       schemaVersion: 1,
-      scenario: 'Users edit unsuccessful edit',
-      baseRevision: 'base-sha',
-      headRevision: 'head-sha',
-      baseAppMap: 'base.appmap.json',
-      headAppMap: 'head.appmap.json',
-      base: diagram,
-      head: diagram,
-      diff: diagram,
+      producer: { name: 'extension-test', version: '1' },
+      scenario: { id: 'users-edit-unsuccessful-edit' },
+      revisions: { base: 'base-sha', head: 'head-sha' },
+      recordings: { base: 'base.appmap.json', head: 'head.appmap.json' },
+      capabilities: {
+        views: { sequence: 1 },
+        navigation: { changes: 1, eventAlignment: 1 },
+      },
       changes: [],
+      views: {
+        sequence: {
+          schemaVersion: 1,
+          base: diagram,
+          head: diagram,
+          diff: diagram,
+          alignment: { actorOrder: diagram.actors.map((actor) => actor.id) },
+        },
+      },
     })
   );
 }
@@ -78,14 +96,17 @@ describe('AppMap sequence comparison editor', () => {
       | SequenceComparison
       | undefined;
     assert(comparison);
-    assert.equal(comparison.kind, 'appmap.sequence-comparison');
-    assert(comparison.base?.actors && comparison.head?.actors && comparison.diff?.actors);
+    assert.equal(comparison.kind, 'appmap.comparison');
+    const sequence = comparison.views?.sequence;
+    assert(sequence?.base?.actors && sequence.head?.actors && sequence.diff?.actors);
 
     try {
       const expectedChange = (await readFile(EXPECTED_CHANGE_PATH, 'utf8')).trim().toLowerCase();
       assert(
         comparison.changes.some((change) =>
-          String(change.name).toLowerCase().includes(expectedChange)
+          [change.summary, change.details?.name?.before, change.details?.name?.after]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(expectedChange))
         ),
         `Expected the dogfood comparison to contain ${expectedChange}`
       );

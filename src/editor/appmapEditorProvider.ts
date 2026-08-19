@@ -42,9 +42,7 @@ export type SavedFilter = {
   default: boolean;
 };
 
-/**
- * Provider for AppLand scenario files.
- */
+/** Provider for AppLand scenario files. */
 export default class AppMapEditorProvider
   implements vscode.CustomReadonlyEditorProvider<AppMapDocument>
 {
@@ -65,8 +63,8 @@ export default class AppMapEditorProvider
   public static readonly APPMAP_OPENED = 'APPMAP_OPENED';
 
   private static readonly viewType = 'appmap.views.appMapFile';
-  private static readonly LARGE_APPMAP_SIZE = 10 * 1000 * 1000; // 10 MB
-  private static readonly GIANT_APPMAP_SIZE = 200 * 1000 * 1000; // 200 MB
+  private static readonly LARGE_APPMAP_SIZE = 10 * 1000 * 1000;
+  private static readonly GIANT_APPMAP_SIZE = 200 * 1000 * 1000;
   private static readonly EMPTY_APPMAP_DATA = '{}';
   private static readonly analysisManager = AnalysisManager;
 
@@ -105,7 +103,14 @@ export default class AppMapEditorProvider
         return abortSequenceDiagramDiff(`Invalid JSON: ${e}`);
       }
 
-      if (parsedDiagram.kind === 'appmap.sequence-comparison') {
+      const views = parsedDiagram.views;
+      const isComparison =
+        parsedDiagram.kind === 'appmap.sequence-comparison' ||
+        (parsedDiagram.kind === 'appmap.comparison' &&
+          typeof views === 'object' &&
+          views !== null &&
+          'sequence' in views);
+      if (isComparison) {
         return new AppMapDocument(
           appMapOrSequenceDiagramDiffUri,
           AppMapEditorProvider.EMPTY_APPMAP_DATA,
@@ -133,7 +138,6 @@ export default class AppMapEditorProvider
       if (!fs.existsSync(appMapPath))
         return abortSequenceDiagramDiff(`Expected AppMap file ${appMapPath} to exist`);
 
-      // Resolve relative to the diff file
       appMapUri = vscode.Uri.file(appMapPath);
     } else {
       appMapUri = appMapOrSequenceDiagramDiffUri;
@@ -145,23 +149,18 @@ export default class AppMapEditorProvider
     const stats = { functions };
 
     let appMapData = AppMapEditorProvider.EMPTY_APPMAP_DATA;
-
-    // If the map is Giant, don't read it into memory
     if (appmapFileSize > AppMapEditorProvider.GIANT_APPMAP_SIZE)
       return new AppMapDocument(appMapUri, appMapData, stats, []);
 
-    // If the map is Large, automatically prune it to ~ 10 MB
     if (appmapFileSize > AppMapEditorProvider.LARGE_APPMAP_SIZE) {
       const prunedData = await this.pruneMap(appMapUri);
       if (prunedData) appMapData = prunedData;
     }
 
-    // If map is not Giant or Large or if pruning failed, read the data from the file
     if (appMapData === AppMapEditorProvider.EMPTY_APPMAP_DATA)
       appMapData = (await vscode.workspace.fs.readFile(appMapUri)).toString();
 
     const findings = this.retrieveAndProcessFindings(appMapUri);
-
     return new AppMapDocument(
       appMapOrSequenceDiagramDiffUri,
       appMapData,
@@ -255,20 +254,13 @@ export default class AppMapEditorProvider
     );
   }
 
-  /**
-   * The currently open documents or an empty array.
-   */
   public get openDocuments(): readonly AppMapDocument[] {
     return this.documents;
   }
 
-  /**
-   * Called when our custom editor is opened.
-   */
   public async resolveCustomEditor(
     document: AppMapDocument,
     webviewPanel: vscode.WebviewPanel
-    /* _token: vscode.CancellationToken */
   ): Promise<void> {
     this.webviewList.enroll(webviewPanel);
 
@@ -294,9 +286,7 @@ export default class AppMapEditorProvider
       }
 
       const { workspaceFolder } = document;
-      if (workspaceFolder) {
-        this.extensionState.setWorkspaceOpenedAppMap(workspaceFolder, true);
-      }
+      if (workspaceFolder) this.extensionState.setWorkspaceOpenedAppMap(workspaceFolder, true);
 
       if (initialState && !document.sequenceDiagramComparison)
         webviewPanel.webview.postMessage({
@@ -317,8 +307,6 @@ export default class AppMapEditorProvider
       }
     })();
 
-    // Handle messages from the webview.
-    // Note: this has to be set before setting the HTML to avoid a race.
     webviewPanel.webview.onDidReceiveMessage(
       appmapMessageHandler(this.filterStore, document.workspaceFolder)
     );
@@ -358,10 +346,7 @@ export default class AppMapEditorProvider
       }
     });
 
-    // Setup initial content for the webview
-    webviewPanel.webview.options = {
-      enableScripts: true,
-    };
+    webviewPanel.webview.options = { enableScripts: true };
     webviewPanel.webview.html = this.getHtmlForWebview(
       webviewPanel.webview,
       Boolean(document.sequenceDiagramComparison)
@@ -374,9 +359,6 @@ export default class AppMapEditorProvider
     });
   }
 
-  /**
-   * Get the static html used for the editor webviews.
-   */
   private getHtmlForWebview(webview: vscode.Webview, comparison = false): string {
     return getWebviewContent(
       webview,
@@ -386,15 +368,11 @@ export default class AppMapEditorProvider
     );
   }
 
-  //forget usage state set by this class
   public static resetState(context: vscode.ExtensionContext): void {
     context.globalState.update(AppMapEditorProvider.APPMAP_OPENED, null);
   }
 }
 
-/**
- * Removes at most one instance of value from array.
- */
 function removeOne<T>(array: Array<T>, value: T): void {
   const position = array.indexOf(value);
   if (position >= 0) array.splice(position, 1);
